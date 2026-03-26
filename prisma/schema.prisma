@@ -1,0 +1,505 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  avatar        String?
+  role          Role      @default(FIELD_WORKER)
+  status        UserStatus @default(ACTIVE)
+  phone         String?
+  timezone      String    @default("UTC")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  tasks         Task[]
+  activities    Activity[]
+  notifications Notification[]
+  
+  @@map("users")
+}
+
+enum Role {
+  SUPER_ADMIN
+  FARM_OWNER
+  FARM_MANAGER
+  AGRONOMIST
+  LIVESTOCK_MANAGER
+  FIELD_WORKER
+  INVENTORY_MANAGER
+  FINANCIAL_ANALYST
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+// Farm & Fields
+model Farm {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  location    String
+  totalArea   Float    // in acres
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  fields      Field[]
+  
+  @@map("farms")
+}
+
+model Field {
+  id            String      @id @default(cuid())
+  name          String
+  farmId        String
+  area          Float       // in acres
+  soilType      String?
+  irrigationType String?
+  status        FieldStatus @default(AVAILABLE)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  // Relations
+  farm          Farm        @relation(fields: [farmId], references: [id])
+  crops         Crop[]
+  sensors       Sensor[]
+  
+  @@map("fields")
+}
+
+enum FieldStatus {
+  AVAILABLE
+  PLANTED
+  FALLOW
+  MAINTENANCE
+}
+
+// Crops
+model Crop {
+  id              String      @id @default(cuid())
+  name            String
+  variety         String?
+  fieldId         String
+  plantedArea     Float
+  plantingDate    DateTime
+  expectedHarvest DateTime?
+  growthStage     GrowthStage @default(GERMINATION)
+  healthStatus    Int         @default(90) // 0-100
+  yieldExpected   Float?      // tons per acre
+  yieldActual     Float?
+  status          CropStatus  @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  // Relations
+  field           Field       @relation(fields: [fieldId], references: [id])
+  treatments      Treatment[]
+  harvestRecords  HarvestRecord[]
+  
+  @@map("crops")
+}
+
+enum GrowthStage {
+  GERMINATION
+  VEGETATIVE
+  FLOWERING
+  MATURATION
+  HARVEST_READY
+}
+
+enum CropStatus {
+  ACTIVE
+  HARVESTED
+  FAILED
+  CANCELLED
+}
+
+model Treatment {
+  id          String   @id @default(cuid())
+  cropId      String
+  type        String   // fertilizer, pesticide, irrigation, etc.
+  name        String
+  description String?
+  appliedAt   DateTime @default(now())
+  dosage      String?
+  cost        Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  crop        Crop     @relation(fields: [cropId], references: [id])
+  
+  @@map("treatments")
+}
+
+model HarvestRecord {
+  id          String   @id @default(cuid())
+  cropId      String
+  harvestDate DateTime @default(now())
+  quantity    Float    // in tons
+  quality     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  crop        Crop     @relation(fields: [cropId], references: [id])
+  
+  @@map("harvest_records")
+}
+
+// Livestock
+model Animal {
+  id            String       @id @default(cuid())
+  tagNumber     String       @unique
+  name          String?
+  type          AnimalType
+  breed         String?
+  birthDate     DateTime?
+  gender        Gender
+  weight        Float?       // in kg
+  status        AnimalStatus @default(HEALTHY)
+  motherId      String?
+  fatherId      String?
+  location      String?
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  healthRecords HealthRecord[]
+  productionRecords ProductionRecord[]
+  
+  @@map("animals")
+}
+
+enum AnimalType {
+  CATTLE
+  SHEEP
+  GOAT
+  POULTRY
+  PIG
+  HORSE
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AnimalStatus {
+  HEALTHY
+  SICK
+  PREGNANT
+  QUARANTINE
+  SOLD
+  DECEASED
+}
+
+model HealthRecord {
+  id           String   @id @default(cuid())
+  animalId     String
+  checkupDate  DateTime @default(now())
+  type         String   // vaccination, treatment, checkup
+  diagnosis    String?
+  treatment    String?
+  veterinarian String?
+  cost         Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+  
+  animal       Animal   @relation(fields: [animalId], references: [id])
+  
+  @@map("health_records")
+}
+
+model ProductionRecord {
+  id          String   @id @default(cuid())
+  animalId    String
+  date        DateTime @default(now())
+  type        String   // milk, egg, wool, etc.
+  quantity    Float
+  unit        String
+  quality     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  animal      Animal   @relation(fields: [animalId], references: [id])
+  
+  @@map("production_records")
+}
+
+// Inventory
+model InventoryItem {
+  id            String         @id @default(cuid())
+  name          String
+  category      ItemCategory
+  description   String?
+  quantity      Float
+  unit          String
+  reorderLevel  Float
+  unitPrice     Float?
+  location      String?
+  supplier      String?
+  status        ItemStatus     @default(IN_STOCK)
+  lastRestocked DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  @@map("inventory_items")
+}
+
+enum ItemCategory {
+  SEEDS
+  FERTILIZER
+  PESTICIDE
+  EQUIPMENT
+  FUEL
+  TOOLS
+  FEED
+  OTHER
+}
+
+enum ItemStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+model PurchaseOrder {
+  id            String        @id @default(cuid())
+  orderNumber   String        @unique
+  supplier      String
+  items         String        // JSON array of items
+  totalAmount   Float
+  status        OrderStatus   @default(PENDING)
+  orderDate     DateTime      @default(now())
+  expectedDate  DateTime?
+  receivedDate  DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@map("purchase_orders")
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// IoT & Sensors
+model Sensor {
+  id            String       @id @default(cuid())
+  sensorId      String       @unique
+  name          String
+  type          SensorType
+  fieldId       String?
+  location      String?
+  batteryLevel  Int          @default(100)
+  status        SensorStatus @default(ONLINE)
+  lastReading   String?
+  lastUpdate    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  field         Field?       @relation(fields: [fieldId], references: [id])
+  readings      SensorReading[]
+  
+  @@map("sensors")
+}
+
+enum SensorType {
+  SOIL_MOISTURE
+  TEMPERATURE
+  HUMIDITY
+  PH
+  WEATHER_STATION
+  GPS_TRACKER
+  WATER_LEVEL
+  OTHER
+}
+
+enum SensorStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  LOW_BATTERY
+}
+
+model SensorReading {
+  id          String   @id @default(cuid())
+  sensorId    String
+  value       Float
+  unit        String
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  sensor      Sensor   @relation(fields: [sensorId], references: [id])
+  
+  @@map("sensor_readings")
+}
+
+// Financial
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  category    String
+  description String
+  amount      Float
+  date        DateTime        @default(now())
+  reference   String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  @@map("transactions")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  invoiceNumber String      @unique
+  client      String
+  items       String        // JSON array of items
+  amount      Float
+  dueDate     DateTime
+  paidDate    DateTime?
+  status      InvoiceStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Tasks & Activities
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  assignedTo  String
+  dueDate     DateTime
+  priority    Priority   @default(MEDIUM)
+  status      TaskStatus @default(PENDING)
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  user        User       @relation(fields: [assignedTo], references: [id])
+  
+  @@map("tasks")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String?
+  details     String?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("activities")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  title       String
+  message     String
+  type        NotificationType
+  isRead      Boolean          @default(false)
+  link        String?
+  createdAt   DateTime         @default(now())
+  
+  user        User             @relation(fields: [userId], references: [id])
+  
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+}
+
+// Weather Data
+model WeatherData {
+  id              String   @id @default(cuid())
+  temperature     Float?
+  humidity        Float?
+  windSpeed       Float?
+  windDirection   String?
+  precipitation   Float?
+  pressure        Float?
+  uvIndex         Float?
+  condition       String?
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  
+  @@map("weather_data")
+}
+
+// Settings
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("settings")
+}
